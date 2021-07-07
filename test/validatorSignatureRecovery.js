@@ -8,6 +8,7 @@ contract('ValidatorSignatureRecovery', async function(accounts) {
 
   let instance = null
   let blockToUse = null
+  const extraDataIndexInHeader = 12
 
   const rinkebyBlock4753195 = {
     difficulty: 1,
@@ -71,42 +72,24 @@ contract('ValidatorSignatureRecovery', async function(accounts) {
 
     blockToUse = rinkebyBlock4753195
 
-    const {headerArray, validatorAddressList, validatorSignatureList, rlpEmptySealExtraData } = formatHeaderToArray(blockToUse) 
+    const headerArray = formatHeaderToArray(blockToUse) 
 
-    if(blockToUse.mixHash === rinkebyMixHash){
-      headerArray[12] = rlpEmptySealExtraData
-    }
-    const rlpHeaderArrayEmptySignatures = rlp.encode(headerArray)
-
-    console.log('blockToUse.hash:', blockToUse.hash)
-
+    const rlpEmptySignatureExtraData = blockToUse.extraData.substring(0, 64+2)
     // Rinkeby/Clique has a single signer
-    const signerSignature = validatorSignatureList[0]
+    const signerSignature = '0x'+blockToUse.extraData.substring(64+2)
+
+    // The block signer's signature needs to be excluded from the extraData in order to calculate the correct msg over which was signed
+    headerArray[extraDataIndexInHeader] = rlpEmptySignatureExtraData
+    // In the smart contract we will take the keccack of the rlpHeaderArrayEmptySignatures
+    const rlpHeaderArrayEmptySignatures = rlp.encode(headerArray)
 
     const txObj = await instance.verifyRinkebyValidatorSignatures(signerSignature, blockToUse.hash, rlpHeaderArrayEmptySignatures, {gas: 10000000, from: accounts[0]})
     console.log('gasUsed:', txObj.receipt.gasUsed)
 
-    console.log('logs:')
-    for(let log of txObj.receipt.logs){
-      if(log.event === 'Uint'){
-        console.log(log.args[1]+': '+log.args[0].toNumber())
-      } else if(log.event === 'Bool'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else if(log.event === 'Bytes'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else if(log.event === 'Bytes32'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else if(log.event === 'String'){
-        console.log(log.args[0])
-      } else if(log.event === 'Address'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else {
-        console.log("unhandled log")
-        console.log({log})
-      }
-    }
+    printLogs(txObj.receipt.logs)
 
     assert.equal(txObj.receipt.status, true)
+    // This test assumes the last log's first argument contains the block signature
     assert.equal(txObj.receipt.logs[txObj.receipt.logs.length-1].args[0], '0x7ffC57839B00206D1ad20c69A1981b489f772031')
 
   })
@@ -115,49 +98,68 @@ contract('ValidatorSignatureRecovery', async function(accounts) {
 
     blockToUse = ibft2Block100656
 
-    const {headerArray, validatorAddressList, validatorSignatureList, rlpEmptySealExtraData } = formatHeaderToArray(blockToUse) 
+    const headerArray = formatHeaderToArray(blockToUse) 
+    //First get rid of the IstanbulExtra's seals
+    const decodedExtraData = rlp.decode(blockToUse.extraData)
+    const validatorAddressListBuffer = decodedExtraData[1]
+    const validatorAddressList = []
+    for(let v of validatorAddressListBuffer){
+      validatorAddressList.push(v.toString('hex'))
+    }
     console.log({validatorAddressList})
-    console.log('validatorSignatureList:')
-    for(let vs of validatorSignatureList){
-      console.log('0x'+vs.toString('hex'))
+
+    const validatorSignatureListBuffer = decodedExtraData[4]
+    const validatorSignatureList = []
+    for(let vs of validatorSignatureListBuffer){
+      validatorSignatureList.push(vs)
     }
+
+    const rlpEmptySealExtraData = '0x' + rlp.encode([
+      decodedExtraData[0], // extra data vanity
+      decodedExtraData[1], // list of validators
+      decodedExtraData[2], // vote? recipient to vote for (Bytes) + vote type (Byte)?
+      //decodedExtraData[3]  // ??
+      //decodedExtraData[4] // seals ?
+    ]).toString('hex')
+
+
     const rlpValidatorSignatures = '0x' + rlp.encode(validatorSignatureList).toString('hex')
-    console.log({rlpValidatorSignatures})
 
-    if(blockToUse.mixHash === ibft2MixHash){
-      headerArray[12] = rlpEmptySealExtraData
-    }
+    headerArray[extraDataIndexInHeader] = rlpEmptySealExtraData
     const rlpHeaderArrayEmptySignatures = rlp.encode(headerArray)
-
-    console.log('blockToUse.hash:', blockToUse.hash)
 
     const txObj = await instance.verifyIBFT2ValidatorSignatures(rlpValidatorSignatures, blockToUse.hash, rlpHeaderArrayEmptySignatures, {gas: 10000000, from: accounts[0]})
     console.log('gasUsed:', txObj.receipt.gasUsed)
 
-    console.log('logs:')
-    for(let log of txObj.receipt.logs){
-      if(log.event === 'Uint'){
-        console.log(log.args[1]+': '+log.args[0].toNumber())
-      } else if(log.event === 'Bool'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else if(log.event === 'Bytes'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else if(log.event === 'Bytes32'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else if(log.event === 'String'){
-        console.log(log.args[0])
-      } else if(log.event === 'Address'){
-        console.log(log.args[1]+': '+log.args[0])
-      } else {
-        console.log("unhandled log")
-        console.log({log})
-      }
-    }
+    printLogs(txObj.receipt.logs)
 
     assert.equal(txObj.receipt.status, true)
 
   })
 })
+
+function printLogs(logs){
+
+  console.log('logs:')
+  for(let log of logs){
+    if(log.event === 'Uint'){
+      console.log(log.args[1]+': '+log.args[0].toNumber())
+    } else if(log.event === 'Bool'){
+      console.log(log.args[1]+': '+log.args[0])
+    } else if(log.event === 'Bytes'){
+      console.log(log.args[1]+': '+log.args[0])
+    } else if(log.event === 'Bytes32'){
+      console.log(log.args[1]+': '+log.args[0])
+    } else if(log.event === 'String'){
+      console.log(log.args[0])
+    } else if(log.event === 'Address'){
+      console.log(log.args[1]+': '+log.args[0])
+    } else {
+      console.log("unhandled log")
+      console.log({log})
+    }
+  }
+}
 
 function toHex(item){
   if(item === 0){
@@ -169,42 +171,6 @@ function toHex(item){
 
 // bh: JSON block header
 function formatHeaderToArray(bh){
-
-  const validatorAddressList = []
-  const validatorSignatureList = []
-  let rlpEmptySealExtraData
-  if(bh.mixHash === ibft2MixHash){
-    //First get rid of the IstanbulExtra's Seal and ComittedSeal since they need to be empty arrays when calculating the blockhash
-    const decodedExtraData = rlp.decode(bh.extraData)
-    const extraVanity = decodedExtraData[0].toString('hex') 
-    const validatorAddressListBuffer = decodedExtraData[1]
-    for(let v of validatorAddressListBuffer){
-      validatorAddressList.push(v.toString('hex'))
-    }
-
-    const validatorSignatureListBuffer = decodedExtraData[4]
-    for(let vs of validatorSignatureListBuffer){
-      validatorSignatureList.push(vs)
-    }
-    rlpEmptySealExtraData = '0x' + rlp.encode([
-      decodedExtraData[0], // extra data vanity
-      decodedExtraData[1], // list of validators
-      //decodedExtraData[2], // vote? recipient to vote for (Bytes) + vote type (Byte)?
-      //decodedExtraData[3]  // ??
-      //decodedExtraData[4] // seals ?
-    ]).toString('hex')
-    console.log('rlpEmptySealExtraData:', rlpEmptySealExtraData)
-    console.log('bh.extraData:', bh.extraData)
-    rlpEmptySealExtraData = '0xa00000000000000000000000000000000000000000000000000000000000000000d594ca31306798b41bc81c43094a1e0462890ce7a673'// bh.extraData.substring(0, 128)//2+64+42*(validatorAddressList.length))
-    console.log('rlpEmptySealExtraData:', rlpEmptySealExtraData)
-    //rlpEmptySealExtraData = '0xf882a00000000000000000000000000000000000000000000000000000000000'
-  } else if (bh.mixHash === rinkebyMixHash){
-    console.log('bh.extraData:', bh.extraData)
-    rlpEmptySealExtraData = bh.extraData.substring(0, 64+2)
-    console.log({rlpEmptySealExtraData})
-    // Rinkeby/Clique has a single signer
-    validatorSignatureList.push('0x'+bh.extraData.substring(64+2))
-  }
 
   // hash block header components to calculate the block hash
   const gasLimit = toHex(bh.gasLimit)
@@ -231,5 +197,5 @@ function formatHeaderToArray(bh){
     bh.nonce
   ]
 
-  return {headerArray, validatorAddressList, validatorSignatureList, rlpEmptySealExtraData}
+  return headerArray
 }
