@@ -22,24 +22,18 @@ async function main(){
     eju.toBuffer(blk.mixHash),
     eju.toBuffer(blk.nonce)
   ];
-  console.log({header})
 
   let msg = eju.rlp.encode(header);
   let msghash = eju.keccak256(msg)
-  console.log('msg', msg.toString('hex'))
-  console.log('msghash', msghash.toString('hex'))
   let sig = blk.extraData.slice(-130);
   let r = "0x" + sig.slice(0, 64);
   let s = '0x' + sig.slice(64, 128);
   let v = '0x' + sig.slice(128, 130);
   v = parseInt(v) + 27;
-  console.log({r})
-  console.log({s})
-  console.log({v})
   let pub = eju.ecrecover(msghash, v, r, s);
   let addr = eju.pubToAddress(pub);
   addr = eju.bufferToHex(addr);
-  console.log(addr);
+  console.log('recovered address', addr);
 }
 
 main()
