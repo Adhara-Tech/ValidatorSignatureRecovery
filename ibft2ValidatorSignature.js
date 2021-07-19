@@ -24,6 +24,8 @@ async function main(){
     uncles: []
   }
 
+  const chain = 44844
+
   const blockToUse = ibft2Block100656
 
   //First get rid of the IstanbulExtra's seals
@@ -76,6 +78,7 @@ async function main(){
     const r = "0x" + signature.slice(0, 64)
     const s = '0x' + signature.slice(64, 128)
     let v = '0x' + signature.slice(128, 130)
+    console.log({v})
     v = parseInt(v) + 27
     const pub = ethereumjsUtils.ecrecover(msghash, v, r, s)
     let addr = ethereumjsUtils.pubToAddress(pub)

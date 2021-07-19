@@ -34,6 +34,7 @@ async function main(){
   let addr = eju.pubToAddress(pub);
   addr = eju.bufferToHex(addr);
   console.log('recovered address', addr);
+  console.log('expected address', '0x7ffc57839b00206d1ad20c69a1981b489f772031');
 }
 
 main()
