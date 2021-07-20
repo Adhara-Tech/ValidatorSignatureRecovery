@@ -46,7 +46,7 @@ async function main(){
     decodedExtraData[0], // extra data vanity
     decodedExtraData[1], // list of validators
     decodedExtraData[2], // vote? recipient to vote for (Bytes) + vote type (Byte)?
-    //decodedExtraData[3]  // ??
+    decodedExtraData[3]  // Round number
     //decodedExtraData[4] // seals ?
   ]).toString('hex')
   console.log({rlpEmptySealExtraData})
